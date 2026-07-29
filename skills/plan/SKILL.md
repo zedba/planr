@@ -196,6 +196,10 @@ only `scripts/board.sh` sees.
 All scripts honor `PLAN_TRUNK` (default `main`) and `PLAN_DIR` (default
 `.plan`) env vars, so the scheme works in any repo without editing the skill.
 
+`tests/run-tests.sh` exercises the scripts end-to-end in a throwaway git repo
+(creation guards, cross-story dependency gating, every lint class); run it
+after changing any script.
+
 ## Extracting this skill
 
 This skill is self-contained and project-agnostic. To use it in another
