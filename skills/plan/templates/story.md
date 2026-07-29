@@ -1,5 +1,6 @@
 ---
 id: __SLUG__
+aliases: [__SLUG__]
 kind: story
 parent: __PARENT__
 title: __TITLE__

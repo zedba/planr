@@ -1,5 +1,6 @@
 ---
 id: __SLUG__
+aliases: [__SLUG__]
 kind: epic
 title: __TITLE__
 status: todo

@@ -1,5 +1,6 @@
 ---
 id: __SLUG__
+aliases: [__SLUG__]
 kind: task
 parent: __PARENT__
 title: __TITLE__
