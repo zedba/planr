@@ -89,9 +89,11 @@ Together they form one dependency graph over the whole backlog. Enforcement:
   what's waiting.
 - **`lint.sh`** keeps the graph sound: a `depends_on` slug that doesn't exist
   (a gate nothing can satisfy), a dangling `parent` (an orphan that roll-up
-  would silently miss), a duplicate slug, or a `depends_on` **cycle** (nothing
-  in the cycle can ever become ready) are all errors. Run it after any
-  frontmatter edit; `new-ticket.sh` and `claim.sh` also run it
+  would silently miss), a duplicate slug, a `depends_on` **cycle** (nothing
+  in the cycle can ever become ready), or a `depends_on` written as a
+  block-style YAML list (the scripts parse only the inline `[a, b]` form —
+  block-style deps would silently stop gating) are all errors. Run it after
+  any frontmatter edit; `new-ticket.sh` and `claim.sh` also run it
   informationally.
 - `blocked` (the status) is still available for *ad-hoc* blockers a dependency
   can't express (an external decision, a bug in a dep outside this plan). Put

@@ -51,7 +51,7 @@ depends_on: []                    # slugs of any tickets that must be done first
 | `created` | yes | `YYYY-MM-DD`. |
 | `updated` | yes | `YYYY-MM-DD`; bump on any edit. |
 | `tags` | no | Free-form list. |
-| `depends_on` | no | List of ticket slugs — **any** ticket, not just siblings — that must be `done` before this ticket is dispatchable. Enforced by `claim.sh`; shown as `BLOCKED-BY` on the board; `lint.sh` errors on dangling slugs and cycles. Prefer this over the `blocked` status for ordering within the plan. |
+| `depends_on` | no | List of ticket slugs — **any** ticket, not just siblings — that must be `done` before this ticket is dispatchable. Enforced by `claim.sh`; shown as `BLOCKED-BY` on the board; `lint.sh` errors on dangling slugs, cycles, and non-inline lists (always write the inline `[a, b]` form — block-style YAML is not parsed). Prefer this over the `blocked` status for ordering within the plan. |
 
 ### Status lifecycle
 

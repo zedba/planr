@@ -14,6 +14,8 @@
 #     doesn't exist (derived roll-up would silently orphan the child)
 #   - depends_on slug that doesn't exist (a gate nothing can ever satisfy)
 #   - depends_on cycle (nothing in the cycle can ever be claimed)
+#   - depends_on without an inline [a, b] value (block-style YAML lists are
+#     not parsed by any script, so the deps would silently stop gating)
 # Warnings (exit 0) — worth a look, may be intentional:
 #   - parent of an unexpected kind (a task's parent is usually a story,
 #     a story's an epic)
@@ -112,6 +114,18 @@ while IFS= read -r f; do
     todo|in_progress|review|done|blocked) ;;
     *) error "$f: invalid status '${status:-<missing>}' (want todo|in_progress|review|done|blocked)" ;;
   esac
+
+  # A depends_on with no inline value (block-style YAML list, or a bare
+  # "depends_on:") parses as empty here AND in claim.sh — the deps would
+  # silently stop gating. Must be loud: that is the one failure mode the
+  # dependency graph cannot survive.
+  if printf '%s' "$blob" | awk '
+       /^---$/ { f = !f; next }
+       f && /^depends_on:[[:space:]]*$/ { bad = 1; exit }
+       END { exit !bad }
+     '; then
+    error "$f: depends_on has no inline value — write depends_on: [a, b] (or []); block-style lists are not parsed and would silently disable gating"
+  fi
 
   if [[ -n "${file_of[$id]:-}" ]]; then
     error "$f: duplicate slug '$id' (also ${file_of[$id]}) — slugs are identity and must be unique across the backlog"

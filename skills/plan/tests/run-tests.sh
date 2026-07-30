@@ -107,6 +107,14 @@ check "lint errors on dangling depends_on" 1 $?
 contains "  ...names the ghost" "depends_on 'ghost-task' does not exist" "$out"
 sed -i 's/^depends_on: \[ghost-task\]/depends_on: [http-proxy]/' .plan/tasks/02-wire-cli.md
 
+# Block-style depends_on parses as empty in lint.sh AND claim.sh — the dep
+# would silently stop gating, so lint must error even though the dep exists.
+sed -i 's/^depends_on: \[http-proxy\]/depends_on:\n  - http-proxy/' .plan/tasks/02-wire-cli.md
+"$skill/scripts/lint.sh" >"$out" 2>&1
+check "lint errors on block-style depends_on" 1 $?
+contains "  ...saying gating would be disabled" "silently disable gating" "$out"
+sed -i -e '/^  - http-proxy$/d' -e 's/^depends_on:$/depends_on: [http-proxy]/' .plan/tasks/02-wire-cli.md
+
 sed -i 's/^depends_on: \[\]/depends_on: [wire-cli]/' .plan/tasks/01-http-proxy.md
 "$skill/scripts/lint.sh" >"$out" 2>&1
 check "lint errors on dependency cycle" 1 $?
