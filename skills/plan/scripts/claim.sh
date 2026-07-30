@@ -21,7 +21,13 @@ path=$(git ls-tree -r --name-only "$trunk" -- "$plan/tasks" 2>/dev/null \
        | grep -E -- "/[0-9]+-${slug}\.md$" | head -n1 || true)
 [[ -z "$path" ]] && { echo "no task file for slug '$slug' on $trunk" >&2; exit 1; }
 
-# Dependency check: every depends_on sibling must be status: done on trunk.
+# Informational backlog lint of trunk (dangling refs, cycles) on stderr; the
+# authoritative gate is the per-task dependency check below.
+here="$(cd "$(dirname "$0")" && pwd)"
+"$here/lint.sh" "$trunk" >&2 || true
+
+# Dependency check: every depends_on prerequisite (any ticket, not just a
+# sibling) must be status: done on trunk.
 deps=$(git show "$trunk:$path" | awk '
   /^---$/ { f = !f; next }
   f && /^depends_on:/ {

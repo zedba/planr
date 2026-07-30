@@ -16,13 +16,15 @@
   Example: `http-connect-proxy`. The slug is the identity; frontmatter `id`
   repeats it for grep.
 - Uniqueness is guaranteed by the tech lead being the sole creator (it can
-  just `ls` the directory).
+  just `ls` the directory) and checked by `scripts/lint.sh` (a duplicate slug
+  anywhere in the backlog is an error).
 
 ## Frontmatter (YAML)
 
 ```yaml
 ---
 id: http-connect-proxy            # matches the filename slug
+aliases: [http-connect-proxy]     # lets Obsidian resolve [[http-connect-proxy]]
 kind: task                        # epic | story | task
 parent: network-firewall          # parent slug; ABSENT for epics
 title: Implement HTTP CONNECT allowlist proxy
@@ -31,7 +33,7 @@ assignee: null                    # agent id when claimed; else null
 created: 2025-07-29
 updated: 2025-07-29
 tags: [firewall, v1]              # optional
-depends_on: []                    # sibling slugs (same parent) that must be done first
+depends_on: []                    # slugs of any tickets that must be done first
 ---
 ```
 
@@ -40,15 +42,16 @@ depends_on: []                    # sibling slugs (same parent) that must be don
 | Field | Required | Notes |
 |---|---|---|
 | `id` | yes | The slug; matches filename without `.md`. |
+| `aliases` | no | `[<slug>]`, so Obsidian resolves `[[slug]]` links despite the `NN-` filename prefix. Never read by scripts. |
 | `kind` | yes | `epic`, `story`, or `task`. |
-| `parent` | stories & tasks | The parent's slug. Omit entirely for epics. |
+| `parent` | stories & tasks | The parent's slug. Omit entirely for epics. `lint.sh` errors if the slug doesn't exist. |
 | `title` | yes | Human-readable; may differ from slug. |
 | `status` | yes | `todo` · `in_progress` · `review` · `done` · `blocked`. |
 | `assignee` | no | Agent id when claimed; `null` otherwise. |
 | `created` | yes | `YYYY-MM-DD`. |
 | `updated` | yes | `YYYY-MM-DD`; bump on any edit. |
 | `tags` | no | Free-form list. |
-| `depends_on` | no | List of sibling slugs (same parent) that must be `done` before this ticket is dispatchable. Enforced by `claim.sh`; shown as `BLOCKED-BY` on the board. Prefer this over the `blocked` status for sibling ordering. |
+| `depends_on` | no | List of ticket slugs — **any** ticket, not just siblings — that must be `done` before this ticket is dispatchable. Enforced by `claim.sh`; shown as `BLOCKED-BY` on the board; `lint.sh` errors on dangling slugs, cycles, and non-inline lists (always write the inline `[a, b]` form — block-style YAML is not parsed). Prefer this over the `blocked` status for ordering within the plan. |
 
 ### Status lifecycle
 
@@ -109,6 +112,29 @@ date: 2025-07-29
 Epics and stories may omit `Acceptance`/`Validation`/`Review` (those live on
 tasks) and instead carry a `## Scope` / `## Out of scope` section. Stories may
 use `depends_on` for cross-story ordering.
+
+### Wiki-links (soft references)
+
+Bodies may reference other tickets with Obsidian-style links:
+
+```markdown
+## Context
+Part of [[network-firewall]]. Builds on the resolver from
+[[dns-allowlist|the DNS allowlist task]].
+
+## Notes
+- 2025-07-29 discovered while implementing [[http-connect-proxy]]
+```
+
+The target is the **slug** (not the `NN-` filename); `|label` and `#heading`
+suffixes are fine. Links are soft context — related work, discovered-from,
+supersedes — and are **never parsed by scripts**: ordering/gating lives only
+in `depends_on`, hierarchy only in `parent`. Backlinks are derived, not
+stored: `grep -rn '\[\[<slug>' .plan/`. `lint.sh` warns (never errors) on a
+link that matches no ticket slug, since links may legitimately point at
+non-ticket notes. The `aliases` frontmatter field makes `[[slug]]` resolve in
+Obsidian, so `.plan/` doubles as a vault (graph view + backlinks as a free
+read-only UI over the working tree).
 
 ### Review verdict format (machine-checked)
 

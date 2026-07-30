@@ -12,9 +12,9 @@ Three rules deliver it:
 1. **One file per ticket.** All mutable state for a ticket lives in that
    ticket's file.
 2. **Downward is stored in the child.** A task names its parent story and its
-   `depends_on` siblings in frontmatter; a story names its parent epic. The
-   parent never records child state. So updating a child never touches its
-   parent or siblings.
+   `depends_on` prerequisites in frontmatter; a story names its parent epic.
+   The parent never records child state. So updating a child never touches its
+   parent or any other ticket.
 3. **Roll-up is derived, never stored.** A story's progress is computed by
    scanning its child task files on trunk; an epic's by scanning its stories.
    Nobody edits a parent to reflect child progress.
@@ -68,13 +68,18 @@ merge without an approved verdict, is refused by the scripts. This is the
 guardrail against the most common agent failure mode: declaring done on the
 honor system.
 
-## Dependencies between siblings
+## Dependencies (one graph, any ticket to any ticket)
 
-A task (or story) declares the siblings it needs done first via frontmatter:
+A ticket declares what must be `done` before it, via frontmatter:
 ```yaml
 depends_on: [http-connect-proxy, wire-firewall-into-cli]
 ```
-These are slugs of siblings under the same parent. Enforcement:
+These are slugs of **any** tickets in the backlog — most often siblings under
+the same story, but cross-story and cross-epic edges are equally valid (the
+scripts resolve a dep slug across `epics/`, `stories/`, and `tasks/`).
+Hierarchy (`parent`) and ordering (`depends_on`) are independent relations:
+`parent` structures the backlog for roll-up; `depends_on` gates dispatch.
+Together they form one dependency graph over the whole backlog. Enforcement:
 
 - **`claim.sh`** refuses to create a worktree for a task whose `depends_on`
   are not all `status: done` on trunk, printing the blockers. So a worker is
@@ -82,9 +87,17 @@ These are slugs of siblings under the same parent. Enforcement:
 - **`board.sh`** shows a `BLOCKED-BY` column for tasks: any dep not `done` on
   trunk is listed, so the tech lead can see at a glance what's ready versus
   what's waiting.
+- **`lint.sh`** keeps the graph sound: a `depends_on` slug that doesn't exist
+  (a gate nothing can satisfy), a dangling `parent` (an orphan that roll-up
+  would silently miss), a duplicate slug, a `depends_on` **cycle** (nothing
+  in the cycle can ever become ready), or a `depends_on` written as a
+  block-style YAML list (the scripts parse only the inline `[a, b]` form —
+  block-style deps would silently stop gating) are all errors. Run it after
+  any frontmatter edit; `new-ticket.sh` and `claim.sh` also run it
+  informationally.
 - `blocked` (the status) is still available for *ad-hoc* blockers a dependency
   can't express (an external decision, a bug in a dep outside this plan). Put
-  the reason in `## Notes`. Prefer `depends_on` for sibling ordering.
+  the reason in `## Notes`. Prefer `depends_on` for ordering within the plan.
 
 Dependencies are set/edited by the tech lead on trunk (a backlog edit), never
 by workers on a task branch.
@@ -95,7 +108,7 @@ by workers on a task branch.
 
 1. Read the board: `./scripts/board.sh`.
 2. Create tickets with `scripts/new-ticket.sh`, fill bodies, set `depends_on`
-   in frontmatter for sibling ordering, commit.
+   in frontmatter for ordering, run `scripts/lint.sh`, commit.
 3. Dispatch ready tasks (deps `done`) via `scripts/claim.sh`; hand each
    worktree to a worker.
 
@@ -159,7 +172,9 @@ by workers on a task branch.
 - **Renaming a story/epic.** The parent link is in frontmatter (not the
   filename), so renaming a story's file only requires updating `parent:` in its
   child tasks and any `depends_on` that reference it — a small, well-contained
-  edit the tech lead does on trunk.
+  edit the tech lead does on trunk. Run `scripts/lint.sh` afterwards: it
+  errors on any `parent`/`depends_on` still pointing at the old slug and warns
+  on stale `[[wiki-links]]`.
 - **No trunk yet / fresh repo.** `scripts/new-ticket.sh` writes to the working
   tree; commit `.plan/` to trunk before any `claim.sh` so workers branch from a
   backlog that exists.
@@ -175,3 +190,8 @@ by workers on a task branch.
   allocation race-free.
 - **No self-merge.** `done` requires an independent reviewer's approved
   verdict; the scripts enforce it.
+- **No load-bearing links.** Body `[[wiki-links]]` are soft references for
+  humans, agents, and Obsidian; no script reads them. Gating lives only in
+  `depends_on`, hierarchy only in `parent` — both in frontmatter, both
+  checked by `lint.sh`. Links are sugar, never state; backlinks are derived
+  (`grep`), never stored.

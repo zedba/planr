@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Trunk-based planning and backlog management for multi-agent development. A tech-lead agent maintains epics, stories, and tasks as one file per ticket on trunk; worker agents implement one task each in a dedicated git worktree branch; a review agent independently verifies completion before merge. Use when planning work, maintaining a backlog, splitting work into tickets, coordinating parallel agents, reviewing a completed task, or picking up a task to implement.
+description: Trunk-based planning and backlog management for multi-agent development. A tech-lead agent maintains epics, stories, and tasks as one file per ticket on trunk; worker agents implement one task each in a dedicated git worktree branch; a review agent independently verifies completion before merge. Tickets form a dependency graph (any ticket can gate any other) and may cross-reference each other with Obsidian-compatible [[wiki-links]]. Use when planning work, maintaining a backlog, splitting work into tickets, coordinating parallel agents, reviewing a completed task, picking up a task to implement, or linting the backlog for dangling references and dependency cycles.
 ---
 
 # Plan — trunk-based backlog for multi-agent work
@@ -38,8 +38,9 @@ reviewer's approved verdict, which `merge-task.sh` checks before merging.
 One file per ticket under `.plan/{epics,stories,tasks}/`. Filenames are
 descriptive slugs with a 2-digit sort-hint prefix (`01-http-connect-proxy.md`).
 Relationships point **downward is stored in the child**: a task's frontmatter
-names its `parent` story and its `depends_on` siblings; a story names its
-`parent` epic. **No agent ever edits a parent to record child progress** —
+names its `parent` story and its `depends_on` prerequisites (any ticket, not
+just siblings); a story names its `parent` epic. **No agent ever edits a
+parent to record child progress** —
 roll-up is *derived* by scanning child files on trunk at read time. There is
 no central mutable index or board file that gets rewritten on every change.
 Claiming a task = branching a worktree; the branch *is* the claim, so no
@@ -67,15 +68,22 @@ review-ready work is visible before merge — no checkout required.
    ./scripts/board.sh                       # backlog (trunk) + in-flight (branches)
    ```
 2. Create tickets (epics/stories on trunk; tasks under a story, with
-   `depends_on` set for sibling ordering). Use the helper so slug/prefix
+   `depends_on` set for ordering). Use the helper so slug/prefix
    allocation is consistent:
    ```bash
    ./scripts/new-ticket.sh epic   v1-ship-self-hosted    "Ship v1 self-hostable hotcell"
    ./scripts/new-ticket.sh story  network-firewall       "Network firewall"  v1-ship-self-hosted
    ./scripts/new-ticket.sh task   http-connect-proxy     "HTTP CONNECT allowlist proxy"  network-firewall
    ```
-   Then fill the body (Goal / Context / Acceptance / Notes), edit
-   `depends_on:` in frontmatter for sibling dependencies, and `git commit`.
+   Then fill the body (Goal / Context / Acceptance / Notes) and edit
+   `depends_on:` in frontmatter for ordering — a ticket may depend on **any**
+   other ticket, not just siblings (cross-story and cross-epic gates are
+   fine). After editing frontmatter, lint and commit:
+   ```bash
+   ./scripts/lint.sh   # dangling parents/deps, duplicate slugs, dependency cycles
+   git commit ...
+   ```
+   (`new-ticket.sh` and `claim.sh` also run the lint informationally.)
 3. Dispatch workers — one per **ready** task (deps all `done`) — each in its
    own worktree:
    ```bash
@@ -103,7 +111,8 @@ concurrency reasoning, review/validation detail, and edge cases.
 1. Start in your assigned worktree (path given by the tech lead). The task
    file is already flipped to `in_progress` by `claim.sh`.
 2. Read your task file (`.plan/tasks/<NN>-<slug>.md`) and its parent story for
-   context. Note `depends_on` — those siblings are `done` (claim.sh checked).
+   context. Note `depends_on` — those tickets are `done` (claim.sh checked).
+   Follow `[[wiki-links]]` in the body for related context.
 3. **Edit only your task file and code.** Do not edit any other `.plan/` file
    — not the parent story, not siblings.
 4. Implement. Keep task-file `## Notes` updated as a log.
@@ -143,25 +152,53 @@ concurrency reasoning, review/validation detail, and edge cases.
 ## Ticket format
 
 Descriptive slug filenames, YAML frontmatter + markdown body. Frontmatter
-includes `depends_on` (sibling slugs that must be `done` before this task is
-dispatchable). The body grows through the lifecycle: `## Acceptance` (created
-by tech lead) → `## Validation` (worker) → `## Review` (reviewer). See
+includes `depends_on` (slugs of any tickets that must be `done` before this
+one is dispatchable). The body grows through the lifecycle: `## Acceptance`
+(created by tech lead) → `## Validation` (worker) → `## Review` (reviewer). See
 [references/TICKET-FORMAT.md](references/TICKET-FORMAT.md) for the full schema,
 slug rules, status lifecycle, and review format; [templates/](templates/) has
 starter files.
+
+## Links between tickets (Obsidian-compatible)
+
+Ticket bodies may reference other tickets with `[[slug]]` wiki-links —
+`[[http-connect-proxy]]`, or `[[http-connect-proxy|the proxy task]]` — for
+*soft* relationships: related work, "discovered while working on", "supersedes",
+links from a `## Notes` log to the ticket that triaged it. Two hard rules:
+
+- **Links are sugar, never state.** No script parses body links; ordering and
+  gating live only in `depends_on`, hierarchy only in `parent`. `lint.sh`
+  *warns* (never errors) when a link matches no ticket slug.
+- **Backlinks are derived, never stored** — same philosophy as roll-up:
+  ```bash
+  grep -rn '\[\[http-connect-proxy' .plan/   # who references this ticket?
+  ```
+
+Because tickets are frontmatter + wiki-links, `.plan/` opens directly as an
+**Obsidian vault** — graph view, backlinks pane, and properties work out of the
+box, giving you a free read-only UI. The `aliases: [<slug>]` frontmatter field
+(in the templates) is what lets Obsidian resolve `[[slug]]` to the
+`NN-slug.md` file despite the sort-prefix. One caveat: a vault shows the
+*working tree* — the authoritative board is trunk + in-flight branches, which
+only `scripts/board.sh` sees.
 
 ## Scripts
 
 | Script | Who | Purpose |
 |---|---|---|
 | `scripts/board.sh` | all | Read-only board: backlog from trunk + in-flight/review-ready from `plan/*` branches |
-| `scripts/new-ticket.sh` | tech lead | Scaffold a ticket file with next sort-hint + slug |
+| `scripts/lint.sh` | tech lead | Backlog checks: dangling `parent`/`depends_on`, duplicate slugs, dependency cycles (errors); unresolved `[[links]]` (warnings). Lints the working tree, or a ref (`lint.sh main`) |
+| `scripts/new-ticket.sh` | tech lead | Scaffold a ticket file with next sort-hint + slug; verifies the parent exists; runs `lint.sh` |
 | `scripts/claim.sh` | tech lead | Create a worktree branch for a task; flips to `in_progress`; refuses if `depends_on` unmet |
 | `scripts/review.sh` | tech lead/reviewer | Brief a reviewer: branch, worktree, acceptance criteria, diff vs trunk |
 | `scripts/merge-task.sh` | tech lead | Merge an approved task (`status: review` + `verdict: approved`); flips to `done`; handles conflicts with guidance |
 
 All scripts honor `PLAN_TRUNK` (default `main`) and `PLAN_DIR` (default
 `.plan`) env vars, so the scheme works in any repo without editing the skill.
+
+`tests/run-tests.sh` exercises the scripts end-to-end in a throwaway git repo
+(creation guards, cross-story dependency gating, every lint class); run it
+after changing any script.
 
 ## Extracting this skill
 
